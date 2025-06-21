@@ -29,11 +29,48 @@ import {
   faUser,
   faCheckCircle,
   faHashtag,
+  faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons";
 
-const API = "https://disaster-response-platform-c1tf.onrender.com";
-// const API = "http://localhost:4000";
+// API fallback system
+const RAILWAY_API =
+  "https://disaster-response-platform-production.up.railway.app";
+const RENDER_API = "https://disaster-response-platform-c1tf.onrender.com";
+const LOCAL_API = "http://localhost:4000";
+
+// API health check and fallback
+const checkAPIHealth = async (url) => {
+  try {
+    const response = await axios.get(`${url}/disasters`, { timeout: 5000 });
+    return response.status === 200;
+  } catch (error) {
+    return false;
+  }
+};
+
+const getWorkingAPI = async () => {
+  // Try Railway first
+  if (await checkAPIHealth(RAILWAY_API)) {
+    console.log("✅ Using Railway API");
+    return RAILWAY_API;
+  }
+
+  // Try Render as fallback
+  if (await checkAPIHealth(RENDER_API)) {
+    console.log("✅ Using Render API (fallback)");
+    return RENDER_API;
+  }
+
+  // Try local as last resort
+  if (await checkAPIHealth(LOCAL_API)) {
+    console.log("✅ Using Local API (fallback)");
+    return LOCAL_API;
+  }
+
+  console.log("❌ No API available");
+  return RENDER_API; // Default fallback
+};
 
 function App() {
   // Disaster States
@@ -72,6 +109,34 @@ function App() {
   // Map State
   const [showMap, setShowMap] = useState(false);
 
+  // Track removed disasters (local only)
+  const [removedDisasterIds, setRemovedDisasterIds] = useState([]);
+
+  // Edit disaster state
+  const [editDisaster, setEditDisaster] = useState(null);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    location_name: "",
+    tags: "",
+  });
+
+  // API state
+  const [currentAPI, setCurrentAPI] = useState(RENDER_API);
+  const [apiStatus, setApiStatus] = useState("checking");
+
+  // Initialize API on component mount
+  useEffect(() => {
+    const initializeAPI = async () => {
+      setApiStatus("checking");
+      const workingAPI = await getWorkingAPI();
+      setCurrentAPI(workingAPI);
+      setApiStatus("ready");
+    };
+
+    initializeAPI();
+  }, []);
+
   // Fetch all disasters on mount
   useEffect(() => {
     fetchDisasters();
@@ -80,11 +145,24 @@ function App() {
   // Fetch disasters from backend
   const fetchDisasters = async () => {
     try {
-      const res = await axios.get(`${API}/disasters`);
+      const res = await axios.get(`${currentAPI}/disasters`);
       setDisasters(res.data);
     } catch (error) {
-      toast.error("Error fetching disasters. Is the backend running?");
+      toast.error("Error fetching disasters. Checking fallback...");
       console.error(error);
+      // Try to switch API if current one fails
+      const workingAPI = await getWorkingAPI();
+      if (workingAPI !== currentAPI) {
+        setCurrentAPI(workingAPI);
+        toast.info("Switched to backup API");
+        // Retry fetch
+        try {
+          const res = await axios.get(`${workingAPI}/disasters`);
+          setDisasters(res.data);
+        } catch (retryError) {
+          toast.error("All APIs are down");
+        }
+      }
     }
   };
 
@@ -99,7 +177,7 @@ function App() {
     setOfficialUpdates([]);
     try {
       const res = await axios.get(
-        `${API}/disasters/${disasterId}/official-updates`,
+        `${currentAPI}/disasters/${disasterId}/official-updates`,
         {
           params: {
             title: disasterTitle,
@@ -127,7 +205,7 @@ function App() {
     try {
       // Fetch mock posts
       const mockRes = await axios.get(
-        `${API}/mock-social-media/disaster/${disasterId}`,
+        `${currentAPI}/mock-social-media/disaster/${disasterId}`,
         {
           params: {
             title: disasterTitle,
@@ -138,7 +216,7 @@ function App() {
 
       // Fetch user posts
       const userRes = await axios.get(
-        `${API}/mock-social-media/user-posts/${disasterId}`
+        `${currentAPI}/mock-social-media/user-posts/${disasterId}`
       );
 
       // Combine mock posts and user posts
@@ -181,7 +259,7 @@ function App() {
 
     setPostingLoading(true);
     try {
-      const res = await axios.post(`${API}/mock-social-media/create`, {
+      const res = await axios.post(`${currentAPI}/mock-social-media/create`, {
         disaster_id: selectedDisaster.id,
         content: newPostContent,
         platform: "Twitter",
@@ -219,7 +297,7 @@ function App() {
     e.preventDefault();
     try {
       await axios.post(
-        `${API}/disasters`,
+        `${currentAPI}/disasters`,
         {
           ...createForm,
           tags: createForm.tags
@@ -249,7 +327,7 @@ function App() {
     setAnalysisLoading(true);
     setAnalysisResult("");
     try {
-      const res = await axios.post(`${API}/gemini/extract-location`, {
+      const res = await axios.post(`${currentAPI}/gemini/extract-location`, {
         text: analysisText,
       });
       // Assuming the result from backend is directly the extracted location text
@@ -276,9 +354,9 @@ function App() {
     setAnalysisLoading(true);
     setAnalysisResult("");
     try {
-      const res = await axios.post(`${API}/gemini/analyze-image`, {
+      const res = await axios.post(`${currentAPI}/gemini/analyze-image`, {
         image_url: analysisImageUrl,
-        text_context: analysisText, // Pass analysisText as context for image analysis
+        text_context: analysisText, // Passed analysisText as context for image analysis
       });
       setAnalysisResult(res.data.result || "Could not analyze image.");
     } catch (error) {
@@ -316,6 +394,80 @@ function App() {
     } finally {
       setGeocodeLoading(false);
     }
+  };
+
+  // Remove disaster from list (local only)
+  const handleRemoveDisaster = (id) => {
+    setRemovedDisasterIds([...removedDisasterIds, id]);
+  };
+
+  // Delete disaster from backend
+  const handleDeleteDisaster = async (id) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to permanently delete this disaster?"
+      )
+    )
+      return;
+    try {
+      await axios.delete(`${currentAPI}/disasters/${id}`);
+      toast.success("Disaster deleted!");
+      fetchDisasters();
+      if (selectedDisaster && selectedDisaster.id === id)
+        setSelectedDisaster(null);
+    } catch (error) {
+      toast.error("Failed to delete disaster.");
+    }
+  };
+
+  // After updating coordinates, update selected disaster and map
+  const handleAddCoordinates = async () => {
+    try {
+      await axios.patch(`${currentAPI}/disasters/${selectedDisaster.id}`, {
+        lat: parseFloat(geocodeResult.lat),
+        lng: parseFloat(geocodeResult.lon),
+      });
+      toast.success("Coordinates added to disaster!");
+      await fetchDisasters();
+      const updated = disasters.find((d) => d.id === selectedDisaster.id);
+      if (updated) setSelectedDisaster(updated);
+    } catch (error) {
+      toast.error("Failed to update coordinates");
+    }
+  };
+
+  // Open edit form
+  const handleEditDisaster = (d) => {
+    setEditDisaster(d.id);
+    setEditForm({
+      title: d.title,
+      description: d.description,
+      location_name: d.location_name,
+      tags: Array.isArray(d.tags) ? d.tags.join(", ") : d.tags || "",
+    });
+  };
+
+  // Save edit
+  const handleSaveEdit = async (id) => {
+    try {
+      await axios.put(`${currentAPI}/disasters/${id}`, {
+        ...editForm,
+        tags: editForm.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter((t) => t),
+      });
+      toast.success("Disaster updated!");
+      setEditDisaster(null);
+      fetchDisasters();
+    } catch (error) {
+      toast.error("Failed to update disaster.");
+    }
+  };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditDisaster(null);
   };
 
   return (
@@ -469,55 +621,206 @@ function App() {
               </div>
             </li>
           ) : (
-            disasters.map((d) => (
-              <li
-                key={d.id}
-                onClick={() => handleSelectDisaster(d)}
-                className={`list-item ${
-                  selectedDisaster?.id === d.id ? "selected" : ""
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">{d.title}</h3>
-                    <p className="text-gray-600 mb-2">
+            disasters
+              .filter((d) => !removedDisasterIds.includes(d.id))
+              .map((d) => (
+                <li
+                  key={d.id}
+                  onClick={() => handleSelectDisaster(d)}
+                  className={`list-item ${
+                    selectedDisaster?.id === d.id ? "selected" : ""
+                  }`}
+                  style={{ position: "relative" }}
+                >
+                  {/* Remove (X) icon top-right */}
+                  <FontAwesomeIcon
+                    icon={faTimes}
+                    title="Remove from list"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveDisaster(d.id);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      right: 10,
+                      color: "#bbb",
+                      cursor: "pointer",
+                      fontSize: "1.1rem",
+                      zIndex: 2,
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.color = "#e74c3c")
+                    }
+                    onMouseOut={(e) => (e.currentTarget.style.color = "#bbb")}
+                  />
+                  <div className="flex justify-between items-start">
+                    <div style={{ width: "100%" }}>
+                      {editDisaster === d.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSaveEdit(d.id);
+                          }}
+                          className="modern-form"
+                          style={{
+                            background: "#f9f9f9",
+                            borderRadius: 8,
+                            padding: 12,
+                            marginBottom: 8,
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            className="modern-input"
+                            value={editForm.title}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                title: e.target.value,
+                              })
+                            }
+                            placeholder="Title"
+                            required
+                          />
+                          <textarea
+                            className="modern-input modern-textarea"
+                            value={editForm.description}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                description: e.target.value,
+                              })
+                            }
+                            placeholder="Description"
+                            required
+                          />
+                          <input
+                            className="modern-input"
+                            value={editForm.location_name}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                location_name: e.target.value,
+                              })
+                            }
+                            placeholder="Location"
+                            required
+                          />
+                          <input
+                            className="modern-input"
+                            value={editForm.tags}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, tags: e.target.value })
+                            }
+                            placeholder="Tags (comma separated)"
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-small"
+                              onClick={handleCancelEdit}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              className="btn btn-primary btn-small"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <h3 className="font-semibold text-lg mb-2">
+                            {d.title}
+                          </h3>
+                          <p className="text-gray-600 mb-2">
+                            <FontAwesomeIcon
+                              icon={faMapMarkerAlt}
+                              style={{
+                                marginRight: "5px",
+                                color: "var(--favicon-secondary)",
+                              }}
+                            />
+                            {d.location_name}
+                          </p>
+                          <p className="text-gray-500 text-sm mb-3">
+                            {d.description}
+                          </p>
+                          {Array.isArray(d.tags) && d.tags.length > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {d.tags.map((tag, index) => (
+                                <span
+                                  key={index}
+                                  className="disaster-badge badge-flood"
+                                >
+                                  <FontAwesomeIcon
+                                    icon={faHashtag}
+                                    style={{
+                                      marginRight: "3px",
+                                      fontSize: "0.8em",
+                                    }}
+                                  />
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-gray-400">
+                        {new Date(d.created_at).toLocaleDateString()}
+                      </span>
+                      {/* Delete (trash) icon */}
                       <FontAwesomeIcon
-                        icon={faMapMarkerAlt}
+                        icon={faTrash}
+                        title="Delete permanently"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDisaster(d.id);
+                        }}
                         style={{
-                          marginRight: "5px",
-                          color: "var(--favicon-secondary)",
+                          color: "#e74c3c",
+                          cursor: "pointer",
+                          fontSize: "1.2rem",
+                          marginLeft: "12px",
+                          marginTop: "8px",
                         }}
                       />
-                      {d.location_name}
-                    </p>
-                    <p className="text-gray-500 text-sm mb-3">
-                      {d.description}
-                    </p>
-                    {Array.isArray(d.tags) && d.tags.length > 0 && (
-                      <div className="flex gap-2 flex-wrap">
-                        {d.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="disaster-badge badge-flood"
-                          >
-                            <FontAwesomeIcon
-                              icon={faHashtag}
-                              style={{ marginRight: "3px", fontSize: "0.8em" }}
-                            />
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400">
-                      {new Date(d.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </li>
-            ))
+                  {/* Edit (pencil) icon bottom-right */}
+                  {editDisaster !== d.id && (
+                    <FontAwesomeIcon
+                      icon={faEdit}
+                      title="Edit disaster"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditDisaster(d);
+                      }}
+                      style={{
+                        position: "absolute",
+                        bottom: 10,
+                        right: 10,
+                        color: "#3498db",
+                        cursor: "pointer",
+                        fontSize: "1.2rem",
+                        zIndex: 2,
+                      }}
+                    />
+                  )}
+                </li>
+              ))
           )}
         </ul>
       </div>
@@ -915,21 +1218,7 @@ function App() {
                 </p>
                 {selectedDisaster && !selectedDisaster.lat && (
                   <button
-                    onClick={async () => {
-                      try {
-                        await axios.patch(
-                          `${API}/disasters/${selectedDisaster.id}`,
-                          {
-                            lat: parseFloat(geocodeResult.lat),
-                            lng: parseFloat(geocodeResult.lon),
-                          }
-                        );
-                        toast.success("Coordinates added to disaster!");
-                        fetchDisasters();
-                      } catch (error) {
-                        toast.error("Failed to update coordinates");
-                      }
-                    }}
+                    onClick={handleAddCoordinates}
                     className="btn btn-success"
                   >
                     <FontAwesomeIcon
