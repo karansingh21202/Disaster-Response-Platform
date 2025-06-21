@@ -52,10 +52,7 @@ exports.createDisaster = async (req, res) => {
         : tags
         ? tags.split(",").map((t) => t.trim())
         : [],
-      user_id,
-      created_at: new Date().toISOString(),
-      lat,
-      lng,
+      owner_id: user_id,
     };
 
     // Store in Supabase
