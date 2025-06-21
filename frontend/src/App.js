@@ -33,9 +33,7 @@ import {
 import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons";
 
 const API = "https://disaster-response-platform-c1tf.onrender.com";
-
-// Add a helper for concise, web-app friendly Gemini prompts
-const GEMINI_LOCATION_SYSTEM_PROMPT = `You are an assistant for a disaster response web app. When asked for flood locations, always search for the most recent, exact locations affected, and output ONLY a concise, point-wise list of locations (district, city, village, or area), each with a one-liner description if needed. Do not include explanations, context, or historical summaries. Your output must be ready for direct display in a web app.`;
+// const API = "http://localhost:4000";
 
 function App() {
   // Disaster States
@@ -48,12 +46,12 @@ function App() {
     tags: "",
   });
 
-  // Gemini States
-  const [geminiMode, setGeminiMode] = useState("location");
-  const [geminiText, setGeminiText] = useState("");
-  const [geminiImageUrl, setGeminiImageUrl] = useState("");
-  const [geminiResult, setGeminiResult] = useState("");
-  const [geminiLoading, setGeminiLoading] = useState(false);
+  // Analysis States
+  const [analysisMode, setAnalysisMode] = useState("location");
+  const [analysisText, setAnalysisText] = useState("");
+  const [analysisImageUrl, setAnalysisImageUrl] = useState("");
+  const [analysisResult, setAnalysisResult] = useState("");
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   // Geocode States
   const [geocodeAddress, setGeocodeAddress] = useState("");
@@ -245,49 +243,49 @@ function App() {
     }
   };
 
-  // Gemini Location: backend geocode
-  const handleGeminiLocation = async (e) => {
+  // Location extraction
+  const handleLocationExtraction = async (e) => {
     e.preventDefault();
-    setGeminiLoading(true);
-    setGeminiResult("");
+    setAnalysisLoading(true);
+    setAnalysisResult("");
     try {
       const res = await axios.post(`${API}/gemini/extract-location`, {
-        text: geminiText,
+        text: analysisText,
       });
       // Assuming the result from backend is directly the extracted location text
       if (res.data.result) {
-        setGeminiResult(`Extracted Location: ${res.data.result}`);
+        setAnalysisResult(`Extracted Location: ${res.data.result}`);
       } else {
-        setGeminiResult("No location found or could not extract.");
+        setAnalysisResult("No location found or could not extract.");
       }
     } catch (error) {
       console.error(error);
-      setGeminiResult(error.response?.data?.error || "An error occurred.");
+      setAnalysisResult(error.response?.data?.error || "An error occurred.");
     } finally {
-      setGeminiLoading(false);
+      setAnalysisLoading(false);
     }
   };
 
-  // Gemini Image: analyze general image
-  const handleGeminiImage = async (e) => {
+  // Image analysis
+  const handleImageAnalysis = async (e) => {
     e.preventDefault();
-    if (!geminiImageUrl) {
+    if (!analysisImageUrl) {
       toast.info("Please enter an image URL to analyze.");
       return;
     }
-    setGeminiLoading(true);
-    setGeminiResult("");
+    setAnalysisLoading(true);
+    setAnalysisResult("");
     try {
       const res = await axios.post(`${API}/gemini/analyze-image`, {
-        image_url: geminiImageUrl,
-        text_context: geminiText, // Pass geminiText as context for image analysis
+        image_url: analysisImageUrl,
+        text_context: analysisText, // Pass analysisText as context for image analysis
       });
-      setGeminiResult(res.data.result || "Could not analyze image.");
+      setAnalysisResult(res.data.result || "Could not analyze image.");
     } catch (error) {
       console.error(error);
-      setGeminiResult(error.response?.data?.error || "An error occurred.");
+      setAnalysisResult(error.response?.data?.error || "An error occurred.");
     } finally {
-      setGeminiLoading(false);
+      setAnalysisLoading(false);
     }
   };
 
@@ -320,12 +318,6 @@ function App() {
     }
   };
 
-  // In the Gemini location extraction form/handler:
-  const handleGeminiLocationExtract = async (userPrompt) => {
-    const prompt = `${GEMINI_LOCATION_SYSTEM_PROMPT}\n${userPrompt}`;
-    // ... existing code to call backend or Gemini API with this prompt ...
-  };
-
   return (
     <div className="app-container">
       {/* Modern Header */}
@@ -339,7 +331,7 @@ function App() {
         </h1>
         <p className="app-subtitle">
           Real-time disaster monitoring, social media integration, and
-          AI-powered analysis
+          intelligent analysis
         </p>
       </div>
 
@@ -518,328 +510,187 @@ function App() {
                       </div>
                     )}
                   </div>
-                  {d.lat && d.lng && (
-                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
-                      <FontAwesomeIcon
-                        icon={faCheck}
-                        style={{ marginRight: "3px" }}
-                      />
-                      Located
+                  <div className="text-right">
+                    <span className="text-xs text-gray-400">
+                      {new Date(d.created_at).toLocaleDateString()}
                     </span>
-                  )}
+                  </div>
                 </div>
               </li>
             ))
           )}
         </ul>
+      </div>
 
-        {/* Map Section */}
-        <div className="mt-8">
-          <button
-            onClick={() => setShowMap(!showMap)}
-            className="btn btn-primary btn-large"
-          >
-            {showMap ? (
-              <>
+      {/* Selected Disaster Details */}
+      {selectedDisaster && (
+        <div className="modern-card">
+          <h2 className="section-header">
+            <FontAwesomeIcon
+              icon={faInfoCircle}
+              style={{ marginRight: "8px", color: "var(--favicon-info)" }}
+            />
+            Disaster Details: {selectedDisaster.title}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Map Section */}
+            <div>
+              <h3 className="font-semibold mb-3">
                 <FontAwesomeIcon
-                  icon={faTimes}
-                  style={{ marginRight: "8px" }}
+                  icon={faMap}
+                  style={{
+                    marginRight: "5px",
+                    color: "var(--favicon-primary)",
+                  }}
                 />
-                Hide Interactive Map
-              </>
-            ) : (
-              <>
-                <FontAwesomeIcon icon={faMap} style={{ marginRight: "8px" }} />
-                Show Interactive Map
-              </>
-            )}
-          </button>
-
-          {showMap && (
-            <div className="mt-6 map-container">
-              <DisasterMap
-                disasters={disasters}
-                selectedDisaster={selectedDisaster}
-                onDisasterSelect={handleSelectDisaster}
-                socialMediaPosts={socialMediaPosts}
-                officialUpdates={officialUpdates}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Selected Disaster Details */}
-        {selectedDisaster && (
-          <div className="mt-8">
-            <div className="modern-card">
-              <h3 className="section-header">
-                <FontAwesomeIcon
-                  icon={faNewspaper}
-                  style={{ marginRight: "8px", color: "var(--favicon-info)" }}
-                />
-                Official Updates for: {selectedDisaster.title}
+                Location Map
               </h3>
-              {updatesLoading ? (
-                <div className="loading-text">
-                  <div className="loading-spinner"></div>
-                  <FontAwesomeIcon
-                    icon={faNewspaper}
-                    style={{ marginRight: "5px" }}
-                  />
-                  Loading official updates...
-                </div>
-              ) : officialUpdates.length > 0 ? (
-                <ul className="modern-list">
-                  {officialUpdates.map((update, index) => (
-                    <li key={index} className="list-item">
-                      <a
-                        href={update.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block hover:text-blue-600 transition-colors"
-                      >
-                        <h4 className="font-semibold mb-2">{update.title}</h4>
-                        {update.summary && (
-                          <p className="text-gray-600 text-sm">
-                            {update.summary}
-                          </p>
-                        )}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500 text-center py-8">
-                  <FontAwesomeIcon
-                    icon={faNewspaper}
-                    style={{
-                      marginRight: "5px",
-                      color: "var(--favicon-secondary)",
-                    }}
-                  />
-                  No official updates found.
-                </p>
-              )}
+              <div className="mt-6 map-container">
+                <DisasterMap
+                  disasters={[selectedDisaster]}
+                  selectedDisaster={selectedDisaster}
+                  onDisasterSelect={handleSelectDisaster}
+                  socialMediaPosts={socialMediaPosts}
+                  officialUpdates={officialUpdates}
+                />
+              </div>
             </div>
 
             {/* Social Media Section */}
-            <div className="modern-card mt-6">
-              <h3 className="section-header">
-                <FontAwesomeIcon
-                  icon={faComments}
-                  style={{
-                    marginRight: "8px",
-                    color: "var(--favicon-success)",
-                  }}
-                />
-                Social Media Updates for: {selectedDisaster.title}
-              </h3>
-
-              {/* Post Creation */}
-              <div className="mb-6">
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold">
+                  <FontAwesomeIcon
+                    icon={faComments}
+                    style={{
+                      marginRight: "5px",
+                      color: "var(--favicon-info)",
+                    }}
+                  />
+                  Social Media Updates
+                </h3>
                 <button
                   onClick={() => setShowPostForm(!showPostForm)}
-                  className={`btn ${
-                    showPostForm ? "btn-danger" : "btn-success"
-                  }`}
+                  className="btn btn-secondary btn-small"
                 >
-                  {showPostForm ? (
-                    <>
-                      <FontAwesomeIcon
-                        icon={faTimes}
-                        style={{ marginRight: "5px" }}
-                      />
-                      Cancel
-                    </>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon
-                        icon={faEdit}
-                        style={{ marginRight: "5px" }}
-                      />
-                      Create Post
-                    </>
-                  )}
+                  <FontAwesomeIcon
+                    icon={faPlus}
+                    style={{ marginRight: "3px" }}
+                  />
+                  Add Post
                 </button>
               </div>
 
               {showPostForm && (
-                <div className="modern-card mb-6">
-                  <h4 className="font-semibold mb-4">
-                    <FontAwesomeIcon
-                      icon={faEdit}
-                      style={{
-                        marginRight: "5px",
-                        color: "var(--favicon-secondary)",
-                      }}
-                    />
-                    Create a Social Media Post
-                  </h4>
-                  <form onSubmit={handleCreatePost} className="modern-form">
-                    <div className="form-group">
-                      <label className="form-label">
+                <form onSubmit={handleCreatePost} className="modern-form mb-4">
+                  <textarea
+                    value={newPostContent}
+                    onChange={(e) => setNewPostContent(e.target.value)}
+                    placeholder="Share your experience or observation..."
+                    className="modern-input modern-textarea"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={postingLoading}
+                  >
+                    {postingLoading ? (
+                      <>
                         <FontAwesomeIcon
-                          icon={faComments}
-                          style={{
-                            marginRight: "5px",
-                            color: "var(--favicon-secondary)",
-                          }}
+                          icon={faSpinner}
+                          style={{ marginRight: "5px" }}
                         />
-                        Post Content
-                      </label>
-                      <textarea
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                        placeholder="Share your thoughts about this disaster..."
-                        className="modern-input modern-textarea"
-                        maxLength={280}
-                      />
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-sm text-gray-500">
-                          <FontAwesomeIcon
-                            icon={faHashtag}
-                            style={{ marginRight: "3px", fontSize: "0.8em" }}
-                          />
-                          {newPostContent.length}/280 characters
-                        </span>
-                        <button
-                          type="submit"
-                          disabled={postingLoading || !newPostContent.trim()}
-                          className="btn btn-primary"
-                        >
-                          {postingLoading ? (
-                            <>
-                              <FontAwesomeIcon
-                                icon={faSpinner}
-                                style={{ marginRight: "5px" }}
-                              />
-                              Posting...
-                            </>
-                          ) : (
-                            <>
-                              <FontAwesomeIcon
-                                icon={faShare}
-                                style={{ marginRight: "5px" }}
-                              />
-                              Post
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
+                        Posting...
+                      </>
+                    ) : (
+                      <>
+                        <FontAwesomeIcon
+                          icon={faShare}
+                          style={{ marginRight: "5px" }}
+                        />
+                        Share Post
+                      </>
+                    )}
+                  </button>
+                </form>
               )}
 
-              {/* Social Media Posts */}
               {socialMediaLoading ? (
-                <div className="loading-text text-center py-8">
+                <div className="loading-text">
                   <div className="loading-spinner"></div>
-                  <p>
-                    <FontAwesomeIcon
-                      icon={faSpinner}
-                      style={{ marginRight: "5px" }}
-                    />
-                    Refreshing social media posts...
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    <FontAwesomeIcon
-                      icon={faComments}
-                      style={{ marginRight: "3px", fontSize: "0.8em" }}
-                    />
-                    Fetching latest posts and updates...
-                  </p>
+                  <FontAwesomeIcon
+                    icon={faComments}
+                    style={{ marginRight: "5px" }}
+                  />
+                  Loading social media posts...
                 </div>
               ) : socialMediaPosts.length > 0 ? (
-                <div>
-                  <div className="flex justify-end mb-4">
-                    <button
-                      onClick={() =>
-                        fetchSocialMediaPosts(
-                          selectedDisaster.id,
-                          selectedDisaster.title,
-                          selectedDisaster.location_name
-                        )
-                      }
-                      className="btn btn-secondary btn-small"
-                    >
-                      <FontAwesomeIcon
-                        icon={faSpinner}
-                        style={{ marginRight: "5px" }}
-                      />
-                      Refresh Posts
-                    </button>
-                  </div>
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {socialMediaPosts.map((post, index) => (
-                      <div key={post.id || index} className="social-post">
-                        <div className="post-header">
-                          <div className="post-user">
+                <div className="space-y-3">
+                  {socialMediaPosts.slice(0, 5).map((post) => (
+                    <div key={post.id} className="social-post">
+                      <div className="post-header">
+                        <div className="post-user">
+                          <FontAwesomeIcon
+                            icon={faUser}
+                            style={{
+                              marginRight: "5px",
+                              color: "var(--favicon-secondary)",
+                            }}
+                          />
+                          @{post.user}
+                          {post.verified && (
                             <FontAwesomeIcon
-                              icon={faUser}
-                              style={{
-                                marginRight: "5px",
-                                color: "var(--favicon-secondary)",
-                              }}
+                              icon={faCheckCircle}
+                              className="post-verified"
+                              style={{ marginLeft: "5px" }}
                             />
-                            <strong>@{post.user}</strong>
-                            {post.verified && (
-                              <FontAwesomeIcon
-                                icon={faCheckCircle}
-                                style={{
-                                  marginLeft: "5px",
-                                  color: "var(--favicon-success)",
-                                }}
-                              />
-                            )}
-                          </div>
-                          <span className="post-timestamp">
-                            <FontAwesomeIcon
-                              icon={faClock}
-                              style={{
-                                marginRight: "3px",
-                                color: "var(--favicon-secondary)",
-                              }}
-                            />
-                            {new Date(post.timestamp).toLocaleString()}
-                          </span>
+                          )}
                         </div>
-                        <p className="post-content">{post.post}</p>
-                        <div className="post-stats">
-                          <span>
-                            <FontAwesomeIcon
-                              icon={faHeart}
-                              style={{
-                                marginRight: "3px",
-                                color: "var(--favicon-danger)",
-                              }}
-                            />
-                            {post.likes}
-                          </span>
-                          <span>
-                            <FontAwesomeIcon
-                              icon={faRetweet}
-                              style={{
-                                marginRight: "3px",
-                                color: "var(--favicon-success)",
-                              }}
-                            />
-                            {post.retweets}
-                          </span>
-                          <span className="post-platform">
-                            <FontAwesomeIcon
-                              icon={faTwitterBrand}
-                              style={{
-                                marginRight: "3px",
-                                color: "var(--favicon-info)",
-                              }}
-                            />
-                            {post.platform}
-                          </span>
-                        </div>
+                        <span className="post-timestamp">
+                          <FontAwesomeIcon
+                            icon={faClock}
+                            style={{ marginRight: "3px" }}
+                          />
+                          {new Date(post.timestamp).toLocaleString()}
+                        </span>
                       </div>
-                    ))}
-                  </div>
+                      <div className="post-content">{post.post}</div>
+                      <div className="post-stats">
+                        <span>
+                          <FontAwesomeIcon
+                            icon={faHeart}
+                            style={{
+                              marginRight: "3px",
+                              color: "var(--favicon-danger)",
+                            }}
+                          />
+                          {post.likes}
+                        </span>
+                        <span>
+                          <FontAwesomeIcon
+                            icon={faRetweet}
+                            style={{
+                              marginRight: "3px",
+                              color: "var(--favicon-success)",
+                            }}
+                          />
+                          {post.retweets}
+                        </span>
+                        <span className="post-platform">
+                          <FontAwesomeIcon
+                            icon={faTwitterBrand}
+                            style={{
+                              marginRight: "3px",
+                              color: "var(--favicon-info)",
+                            }}
+                          />
+                          {post.platform}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-gray-500 text-center py-8">
@@ -855,24 +706,24 @@ function App() {
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* AI Analysis Section */}
+      {/* Analysis Section */}
       <div className="modern-card">
         <h2 className="section-header">
           <FontAwesomeIcon
             icon={faSearch}
             style={{ marginRight: "8px", color: "var(--favicon-warning)" }}
           />
-          AI-Powered Analysis
+          Intelligent Analysis
         </h2>
 
         <div className="btn-group">
           <button
-            onClick={() => setGeminiMode("location")}
+            onClick={() => setAnalysisMode("location")}
             className={`btn ${
-              geminiMode === "location" ? "btn-primary" : "btn-secondary"
+              analysisMode === "location" ? "btn-primary" : "btn-secondary"
             }`}
           >
             <FontAwesomeIcon
@@ -882,9 +733,9 @@ function App() {
             Extract Location from Text
           </button>
           <button
-            onClick={() => setGeminiMode("image")}
+            onClick={() => setAnalysisMode("image")}
             className={`btn ${
-              geminiMode === "image" ? "btn-primary" : "btn-secondary"
+              analysisMode === "image" ? "btn-primary" : "btn-secondary"
             }`}
           >
             <FontAwesomeIcon icon={faImage} style={{ marginRight: "5px" }} />
@@ -892,8 +743,8 @@ function App() {
           </button>
         </div>
 
-        {geminiMode === "location" ? (
-          <form onSubmit={handleGeminiLocation} className="modern-form">
+        {analysisMode === "location" ? (
+          <form onSubmit={handleLocationExtraction} className="modern-form">
             <div className="form-group">
               <label className="form-label">
                 <FontAwesomeIcon
@@ -906,8 +757,8 @@ function App() {
                 Text for Location Extraction
               </label>
               <textarea
-                value={geminiText}
-                onChange={(e) => setGeminiText(e.target.value)}
+                value={analysisText}
+                onChange={(e) => setAnalysisText(e.target.value)}
                 placeholder="Enter text containing location information..."
                 className="modern-input modern-textarea"
               />
@@ -918,7 +769,7 @@ function App() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleGeminiImage} className="modern-form">
+          <form onSubmit={handleImageAnalysis} className="modern-form">
             <div className="form-group">
               <label className="form-label">
                 <FontAwesomeIcon
@@ -931,8 +782,8 @@ function App() {
                 Image URL
               </label>
               <input
-                value={geminiImageUrl}
-                onChange={(e) => setGeminiImageUrl(e.target.value)}
+                value={analysisImageUrl}
+                onChange={(e) => setAnalysisImageUrl(e.target.value)}
                 placeholder="Enter image URL for disaster analysis..."
                 className="modern-input"
               />
@@ -944,24 +795,24 @@ function App() {
           </form>
         )}
 
-        {geminiLoading && (
+        {analysisLoading && (
           <div className="loading-text mt-4">
             <div className="loading-spinner"></div>
             <FontAwesomeIcon icon={faSpinner} style={{ marginRight: "5px" }} />
-            Processing with AI...
+            Processing...
           </div>
         )}
 
-        {geminiResult && (
+        {analysisResult && (
           <div className="modern-card mt-4">
             <h4 className="font-semibold mb-3">
               <FontAwesomeIcon
                 icon={faSearch}
                 style={{ marginRight: "5px", color: "var(--favicon-warning)" }}
               />
-              AI Analysis Result
+              Analysis Result
             </h4>
-            <p className="text-gray-700">{geminiResult}</p>
+            <p className="text-gray-700">{analysisResult}</p>
           </div>
         )}
       </div>
