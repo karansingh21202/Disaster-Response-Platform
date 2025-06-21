@@ -13,11 +13,11 @@ async function extractLocation(description) {
   if (cached) return cached;
 
   // System prompt for concise, web-app friendly output
-  const SYSTEM_PROMPT = `You are an assistant for a disaster response web app. When asked for flood locations, always search for the most recent, exact locations affected, and output ONLY a concise, point-wise list of locations (district, city, village, or area), each with a one-liner description if needed. Do not include explanations, context, or historical summaries. Your output must be ready for direct display in a web app.`;
+  const SYSTEM_PROMPT = `You are an assistant for a disaster response web app. When asked for disaster locations, always search for the most recent, exact locations affected, and output ONLY a concise, point-wise list of locations (district, city, village, or area), each with a one-liner description if needed. Do not include explanations, context, or historical summaries. Your output must be ready for direct display in a web app.Do not concise your putput for only one type of disaster be open`;
 
   let prompt = `${SYSTEM_PROMPT}\n${description}`;
   if (description.length > 500) {
-    prompt = `${SYSTEM_PROMPT}\nThe following description is long. Extract only the most recent, exact locations affected by floods, in a concise, point-wise list. Description: "${description.slice(
+    prompt = `${SYSTEM_PROMPT}\nThe following description is long. Extract only the most recent, exact locations affected by  related disaster, in a concise, point-wise list. Description: "${description.slice(
       0,
       500
     )}..."`;
