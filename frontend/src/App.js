@@ -30,11 +30,16 @@ import {
   faCheckCircle,
   faHashtag,
   faTrash,
+  faUserCircle,
+  faBullhorn,
+  faBuilding,
+  faExternalLinkAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons";
 
 // API fallback system
-const RAILWAY_API = "https://disaster-response-platform-production.up.railway.app";
+const RAILWAY_API =
+  "https://disaster-response-platform-production.up.railway.app";
 const RENDER_API = "https://disaster-response-platform-c1tf.onrender.com";
 const LOCAL_API = "http://localhost:4000";
 
@@ -124,6 +129,9 @@ function App() {
   const [currentAPI, setCurrentAPI] = useState(RENDER_API);
   const [apiStatus, setApiStatus] = useState("checking");
 
+  // New state for disaster to delete
+  const [disasterToDelete, setDisasterToDelete] = useState(null);
+
   // Initialize API on component mount
   useEffect(() => {
     const initializeAPI = async () => {
@@ -138,8 +146,10 @@ function App() {
 
   // Fetch all disasters on mount
   useEffect(() => {
-    fetchDisasters();
-  }, []);
+    if (apiStatus === "ready") {
+      fetchDisasters();
+    }
+  }, [apiStatus]);
 
   // Fetch disasters from backend
   const fetchDisasters = async () => {
@@ -169,7 +179,8 @@ function App() {
   const fetchOfficialUpdates = async (
     disasterId,
     disasterTitle,
-    disasterLocation
+    disasterLocation,
+    refresh = false
   ) => {
     if (!disasterId) return;
     setUpdatesLoading(true);
@@ -181,6 +192,7 @@ function App() {
           params: {
             title: disasterTitle,
             location_name: disasterLocation,
+            refresh: refresh ? "true" : undefined,
           },
         }
       );
@@ -402,20 +414,17 @@ function App() {
 
   // Delete disaster from backend
   const handleDeleteDisaster = async (id) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to permanently delete this disaster?"
-      )
-    )
-      return;
     try {
       await axios.delete(`${currentAPI}/disasters/${id}`);
-      toast.success("Disaster deleted!");
+      toast.success("Disaster permanently deleted!");
       fetchDisasters();
-      if (selectedDisaster && selectedDisaster.id === id)
+      if (selectedDisaster?.id === id) {
         setSelectedDisaster(null);
+      }
     } catch (error) {
       toast.error("Failed to delete disaster.");
+    } finally {
+      setDisasterToDelete(null); // This will close the modal
     }
   };
 
@@ -467,6 +476,11 @@ function App() {
   // Cancel edit
   const handleCancelEdit = () => {
     setEditDisaster(null);
+  };
+
+  // New state for disaster to delete
+  const promptDeleteDisaster = (id) => {
+    setDisasterToDelete(id);
   };
 
   return (
@@ -786,15 +800,21 @@ function App() {
                         title="Delete permanently"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteDisaster(d.id);
+                          promptDeleteDisaster(d.id);
                         }}
                         style={{
-                          color: "#e74c3c",
+                          color: "#bbb",
                           cursor: "pointer",
                           fontSize: "1.2rem",
                           marginLeft: "12px",
                           marginTop: "8px",
                         }}
+                        onMouseOver={(e) =>
+                          (e.currentTarget.style.color = "#c0392b")
+                        }
+                        onMouseOut={(e) =>
+                          (e.currentTarget.style.color = "#bbb")
+                        }
                       />
                     </div>
                   </div>
@@ -859,153 +879,223 @@ function App() {
               </div>
             </div>
 
-            {/* Social Media Section */}
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold">
-                  <FontAwesomeIcon
-                    icon={faComments}
-                    style={{
-                      marginRight: "5px",
-                      color: "var(--favicon-info)",
-                    }}
-                  />
-                  Social Media Updates
-                </h3>
-                <button
-                  onClick={() => setShowPostForm(!showPostForm)}
-                  className="btn btn-secondary btn-small"
-                >
-                  <FontAwesomeIcon
-                    icon={faPlus}
-                    style={{ marginRight: "3px" }}
-                  />
-                  Add Post
-                </button>
+            {/* Right Column for Feeds */}
+            <div className="space-y-6">
+              {/* Social Media Section */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold">
+                    <FontAwesomeIcon
+                      icon={faComments}
+                      style={{
+                        marginRight: "5px",
+                        color: "var(--favicon-info)",
+                      }}
+                    />
+                    Social Media Updates
+                  </h3>
+                  <button
+                    onClick={() => setShowPostForm(!showPostForm)}
+                    className="btn btn-secondary btn-small"
+                  >
+                    <FontAwesomeIcon
+                      icon={faPlus}
+                      style={{ marginRight: "3px" }}
+                    />{" "}
+                    Add Post
+                  </button>
+                </div>
+                {showPostForm && (
+                  <form
+                    onSubmit={handleCreatePost}
+                    className="modern-form mb-4"
+                  >
+                    <textarea
+                      value={newPostContent}
+                      onChange={(e) => setNewPostContent(e.target.value)}
+                      placeholder="Share your experience or observation..."
+                      className="modern-input modern-textarea"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={postingLoading}
+                    >
+                      {postingLoading ? (
+                        <>
+                          <FontAwesomeIcon
+                            icon={faSpinner}
+                            style={{ marginRight: "5px" }}
+                          />
+                          Posting...
+                        </>
+                      ) : (
+                        <>
+                          <FontAwesomeIcon
+                            icon={faShare}
+                            style={{ marginRight: "5px" }}
+                          />
+                          Share Post
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+                {socialMediaLoading ? (
+                  <div className="loading-text">
+                    <div className="loading-spinner"></div> Loading social media
+                    posts...
+                  </div>
+                ) : socialMediaPosts.length > 0 ? (
+                  <div className="space-y-3">
+                    {socialMediaPosts.slice(0, 5).map((post) => (
+                      <div key={post.id} className="social-post">
+                        <div className="post-header">
+                          <div className="post-user">
+                            <FontAwesomeIcon
+                              icon={faUser}
+                              style={{ marginRight: "5px" }}
+                            />
+                            @{post.user}
+                            {post.verified && (
+                              <FontAwesomeIcon
+                                icon={faCheckCircle}
+                                className="post-verified"
+                                style={{ marginLeft: "5px" }}
+                              />
+                            )}
+                          </div>
+                          <span className="post-timestamp">
+                            <FontAwesomeIcon
+                              icon={faClock}
+                              style={{ marginRight: "3px" }}
+                            />
+                            {new Date(post.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="post-content">{post.post}</div>
+                        <div className="post-stats">
+                          <span>
+                            <FontAwesomeIcon
+                              icon={faHeart}
+                              style={{
+                                marginRight: "3px",
+                                color: "var(--favicon-danger)",
+                              }}
+                            />
+                            {post.likes}
+                          </span>
+                          <span>
+                            <FontAwesomeIcon
+                              icon={faRetweet}
+                              style={{
+                                marginRight: "3px",
+                                color: "var(--favicon-success)",
+                              }}
+                            />
+                            {post.retweets}
+                          </span>
+                          <span className="post-platform">
+                            <FontAwesomeIcon
+                              icon={faTwitterBrand}
+                              style={{
+                                marginRight: "3px",
+                                color: "var(--favicon-info)",
+                              }}
+                            />
+                            {post.platform}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">
+                    <FontAwesomeIcon
+                      icon={faComments}
+                      style={{ marginRight: "5px" }}
+                    />
+                    No social media posts found.
+                  </p>
+                )}
               </div>
 
-              {showPostForm && (
-                <form onSubmit={handleCreatePost} className="modern-form mb-4">
-                  <textarea
-                    value={newPostContent}
-                    onChange={(e) => setNewPostContent(e.target.value)}
-                    placeholder="Share your experience or observation..."
-                    className="modern-input modern-textarea"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={postingLoading}
-                  >
-                    {postingLoading ? (
-                      <>
-                        <FontAwesomeIcon
-                          icon={faSpinner}
-                          style={{ marginRight: "5px" }}
-                        />
-                        Posting...
-                      </>
-                    ) : (
-                      <>
-                        <FontAwesomeIcon
-                          icon={faShare}
-                          style={{ marginRight: "5px" }}
-                        />
-                        Share Post
-                      </>
-                    )}
-                  </button>
-                </form>
-              )}
-
-              {socialMediaLoading ? (
-                <div className="loading-text">
-                  <div className="loading-spinner"></div>
+              {/* Official Updates Section */}
+              <div>
+                <h3 className="font-semibold mb-3">
                   <FontAwesomeIcon
-                    icon={faComments}
-                    style={{ marginRight: "5px" }}
-                  />
-                  Loading social media posts...
-                </div>
-              ) : socialMediaPosts.length > 0 ? (
-                <div className="space-y-3">
-                  {socialMediaPosts.slice(0, 5).map((post) => (
-                    <div key={post.id} className="social-post">
-                      <div className="post-header">
-                        <div className="post-user">
-                          <FontAwesomeIcon
-                            icon={faUser}
-                            style={{
-                              marginRight: "5px",
-                              color: "var(--favicon-secondary)",
-                            }}
-                          />
-                          @{post.user}
-                          {post.verified && (
-                            <FontAwesomeIcon
-                              icon={faCheckCircle}
-                              className="post-verified"
-                              style={{ marginLeft: "5px" }}
-                            />
-                          )}
-                        </div>
-                        <span className="post-timestamp">
-                          <FontAwesomeIcon
-                            icon={faClock}
-                            style={{ marginRight: "3px" }}
-                          />
-                          {new Date(post.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="post-content">{post.post}</div>
-                      <div className="post-stats">
-                        <span>
-                          <FontAwesomeIcon
-                            icon={faHeart}
-                            style={{
-                              marginRight: "3px",
-                              color: "var(--favicon-danger)",
-                            }}
-                          />
-                          {post.likes}
-                        </span>
-                        <span>
-                          <FontAwesomeIcon
-                            icon={faRetweet}
-                            style={{
-                              marginRight: "3px",
-                              color: "var(--favicon-success)",
-                            }}
-                          />
-                          {post.retweets}
-                        </span>
-                        <span className="post-platform">
-                          <FontAwesomeIcon
-                            icon={faTwitterBrand}
-                            style={{
-                              marginRight: "3px",
-                              color: "var(--favicon-info)",
-                            }}
-                          />
-                          {post.platform}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-8">
-                  <FontAwesomeIcon
-                    icon={faComments}
+                    icon={faBullhorn}
                     style={{
                       marginRight: "5px",
-                      color: "var(--favicon-secondary)",
+                      color: "var(--favicon-warning)",
                     }}
                   />
-                  No social media posts found.
-                </p>
-              )}
+                  Official Updates
+                </h3>
+                <button
+                  onClick={() =>
+                    fetchOfficialUpdates(
+                      selectedDisaster.id,
+                      selectedDisaster.title,
+                      selectedDisaster.location_name,
+                      true
+                    )
+                  }
+                  disabled={updatesLoading}
+                  className="btn btn-secondary mb-3"
+                >
+                  {updatesLoading ? "Loading..." : "Refresh Official Updates"}
+                </button>
+                {updatesLoading && <div className="loader"></div>}
+                <div className="official-updates-feed">
+                  {officialUpdates.length > 0 ? (
+                    officialUpdates.map((update) => (
+                      <div
+                        key={update.id}
+                        className="official-update-post clickable-update"
+                        onClick={() =>
+                          update.url && window.open(update.url, "_blank")
+                        }
+                        style={{ cursor: update.url ? "pointer" : "default" }}
+                        title={update.url ? "Click to view full article" : ""}
+                      >
+                        <div className="post-header">
+                          <span className="post-user">
+                            <FontAwesomeIcon icon={faBuilding} />{" "}
+                            {update.agency}
+                          </span>
+                          <span className="post-timestamp">
+                            {new Date(update.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="post-content">{update.update_text}</p>
+                        {update.url && (
+                          <div className="update-link-indicator">
+                            <FontAwesomeIcon
+                              icon={faExternalLinkAlt}
+                              style={{
+                                marginRight: "5px",
+                                color: "var(--favicon-info)",
+                                fontSize: "12px",
+                              }}
+                            />
+                            Click to read full article
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-center py-8">
+                      <FontAwesomeIcon
+                        icon={faBullhorn}
+                        style={{ marginRight: "5px" }}
+                      />
+                      No official updates found.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1246,6 +1336,32 @@ function App() {
         pauseOnHover
         theme="light"
       />
+
+      {disasterToDelete && (
+        <div className="modal-backdrop">
+          <div className="modal-content">
+            <h3 className="text-lg font-bold mb-4">Confirm Deletion</h3>
+            <p>
+              Are you sure you want to permanently delete this disaster report?
+              This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                onClick={() => setDisasterToDelete(null)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteDisaster(disasterToDelete)}
+                className="btn btn-danger"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
