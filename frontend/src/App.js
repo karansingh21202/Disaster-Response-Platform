@@ -34,8 +34,7 @@ import {
 import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons";
 
 // API fallback system
-const RAILWAY_API =
-  "https://disaster-response-platform-production.up.railway.app";
+const RAILWAY_API = "https://disaster-response-platform-production.up.railway.app";
 const RENDER_API = "https://disaster-response-platform-c1tf.onrender.com";
 const LOCAL_API = "http://localhost:4000";
 
@@ -851,7 +850,7 @@ function App() {
               </h3>
               <div className="mt-6 map-container">
                 <DisasterMap
-                  disasters={[selectedDisaster]}
+                  disasters={disasters}
                   selectedDisaster={selectedDisaster}
                   onDisasterSelect={handleSelectDisaster}
                   socialMediaPosts={socialMediaPosts}
