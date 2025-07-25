@@ -10,12 +10,10 @@ import {
   faMapMarkerAlt,
   faSearch,
   faGlobe,
-  faNewspaper,
   faMap,
   faPlus,
   faEye,
   faEdit,
-  faCheck,
   faTimes,
   faSpinner,
   faImage,
@@ -30,51 +28,76 @@ import {
   faCheckCircle,
   faHashtag,
   faTrash,
-  faUserCircle,
   faBullhorn,
   faBuilding,
   faExternalLinkAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons";
 
-// API fallback system
-const RAILWAY_API =
-  "https://disaster-response-platform-production.up.railway.app";
+// API configuration
+const VERCEL_API = "https://disaster-response-platform-8kc4.vercel.app";
+const RAILWAY_API = "https://disaster-response-platform-production.up.railway.app";
 const RENDER_API = "https://disaster-response-platform-c1tf.onrender.com";
-
 const LOCAL_API = "http://localhost:4000";
 
 // API health check and fallback
 const checkAPIHealth = async (url) => {
   try {
-    const response = await axios.get(`${url}/disasters`, { timeout: 6000 });
+    // Real health check
+    const response = await axios.get(`${url}/disasters`, { 
+      timeout: 6000,
+      headers: {
+        'x-user-id': 'citizen1'  // Required user ID header
+      }
+    });
     return response.status === 200;
   } catch (error) {
+    console.error(`API check failed for ${url}:`, error.message);
     return false;
   }
 };
 
+// Track if we've shown the error toast to prevent duplicates
+let hasShownErrorToast = false;
+
 const getWorkingAPI = async () => {
-  // Try Railway first
-  if (await checkAPIHealth(RAILWAY_API)) {
-    console.log("✅ Using Railway API");
-    return RAILWAY_API;
+    const apis = [
+    VERCEL_API,  // First try Vercel
+    RAILWAY_API, // Then try Railway
+    RENDER_API,  // Then try Render
+    LOCAL_API,   // Finally try local
+  ];
+
+  // Reset error toast flag if any API is working
+  let anyApiWorking = false;
+  
+  for (const api of apis) {
+    const isHealthy = await checkAPIHealth(api);
+    if (isHealthy) {
+      const apiDomain = new URL(api).hostname;
+      console.log(`✅ Using ${apiDomain} API`);
+      anyApiWorking = true;
+      hasShownErrorToast = false; // Reset since we found a working API
+      return api;
+    }
   }
 
-  // Try Render as fallback
-  if (await checkAPIHealth(RENDER_API)) {
-    console.log("✅ Using Render API (fallback)");
-    return RENDER_API;
+  // If we get here, no APIs are working
+  console.log("❌ No API available, using default fallback");
+  
+  // Only show the error toast if we haven't shown it yet and no API is working
+  if (!anyApiWorking && !hasShownErrorToast) {
+    toast.error("⚠️ This project's backend service is currently inactive.\n\nThis might be due to the Supabase project being paused after 7 days of inactivity.\n\nFor any queries, please contact: karansingh5112002@gmail.com", {
+      autoClose: 10000,
+      position: "top-center",
+      pauseOnHover: true,
+      draggable: true,
+      toastId: 'api-error' 
+    });
+    hasShownErrorToast = true;
   }
-
-  // Try local as last resort
-  if (await checkAPIHealth(LOCAL_API)) {
-    console.log("✅ Using Local API (fallback)");
-    return LOCAL_API;
-  }
-
-  console.log("❌ No API available");
-  return RENDER_API; // Default fallback
+  
+  return VERCEL_API; 
 };
 
 function App() {
@@ -127,7 +150,7 @@ function App() {
   });
 
   // API state
-  const [currentAPI, setCurrentAPI] = useState(RENDER_API);
+  const [currentAPI, setCurrentAPI] = useState(VERCEL_API);
   const [apiStatus, setApiStatus] = useState("checking");
 
   // New state for disaster to delete
