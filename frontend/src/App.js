@@ -41,12 +41,13 @@ import { faTwitter as faTwitterBrand } from "@fortawesome/free-brands-svg-icons"
 const RAILWAY_API =
   "https://disaster-response-platform-production.up.railway.app";
 const RENDER_API = "https://disaster-response-platform-c1tf.onrender.com";
+
 const LOCAL_API = "http://localhost:4000";
 
 // API health check and fallback
 const checkAPIHealth = async (url) => {
   try {
-    const response = await axios.get(`${url}/disasters`, { timeout: 5000 });
+    const response = await axios.get(`${url}/disasters`, { timeout: 6000 });
     return response.status === 200;
   } catch (error) {
     return false;
